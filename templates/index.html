@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KTP OCR Web App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        header {
+            background-color: #35424a;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        footer {
+            background-color: #35424a;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+        .container {
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0px 0px 5px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 600px;
+        }
+        form {
+            margin-top: 20px;
+        }
+        pre {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>KTP OCR Web App</h1>
+    </header>
+    
+    <div class="container">
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="image" accept="image/*" required>
+            <button type="submit">Upload & Process</button>
+        </form>
+        {% if image %}
+            <h2>Uploaded Image</h2>
+            <img src="{{ image }}" alt="Image" style="max-width: 100%;">
+        {% endif %}
+
+        {% if json_data %}
+        <h2>Extracted Data</h2>
+        <pre>{{ json_data }}</pre>
+        <h2>Accuracy</h2>
+        <p>NIK Accuracy: {{ nik_accuracy }}%</p>
+        <p>Name Accuracy: {{ nama_accuracy }}%</p>
+        {% endif %}
+
+        {% if error_message %}
+        <h2>Error</h2>
+        <p>{{ error_message }}</p>
+        {% endif %}
+    </div>
+    <footer>
+        &copy; 2023 KTP OCR Web App
+    </footer>
+</body>
+</html>
