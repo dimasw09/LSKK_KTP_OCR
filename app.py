@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 app = Flask(__name__)
 
 # Constants
-THRESHOLD_VALUE = 170
+THRESHOLD_VALUE = 180
 LANG = "ind"
 ALLOWED_FIELDS = ["NIK", "Nama"]
 GROUND_TRUTH = {
@@ -16,7 +16,7 @@ GROUND_TRUTH = {
     "Nama": "HADI WIBOWO"
 }
 
-# Function Definitions (keep them the same)
+# Function Definitions
 
 def similarity_ratio(a, b):
     return SequenceMatcher(None, a, b).ratio()
@@ -28,18 +28,14 @@ def extract_data(image_path):
     with open(image_path, "rb") as img_file:
         img = cv2.imdecode(np.frombuffer(img_file.read(), np.uint8), cv2.IMREAD_COLOR)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
+    _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 255, cv2.THRESH_BINARY)
     result = pytesseract.image_to_string(threshed, lang=LANG)
-    cv2.imshow('ocr1', threshed)
-    cv2.waitKey(0)
-    # print(result)
     return result
 
 def parse_extracted_data(extracted_text):
     data = {}
     lines = extracted_text.split("\n")
     for line in lines:
-        print("Line:", line)  # Print the line for debugging
         for field in ALLOWED_FIELDS:
             if field in line:
                 field_value = line.split(':', 1)
@@ -48,18 +44,19 @@ def parse_extracted_data(extracted_text):
                     data[field.strip()] = value.strip()
     return data
 
-
 def filter_data(data):
-    filtered_data = {field: data[field] for field in ALLOWED_FIELDS if field in data}
-    return filtered_data
+    return {field: data[field] for field in ALLOWED_FIELDS if field in data}
 
 def create_json_data(image_file, filtered_data):
     ordered_data = {"nama_file": image_file, **filtered_data}
     json_data = json.dumps(ordered_data, indent=3)
     return json_data
 
+uploaded_image_path = None
+
 @app.route("/", methods=["GET", "POST"])
 def index():
+    global uploaded_image_path
     if request.method == "POST":
         image_file = request.files["image"]
         if image_file:
@@ -77,8 +74,10 @@ def index():
 
                 nik_accuracy = calculate_accuracy(GROUND_TRUTH["NIK"], filtered_data.get("NIK", ""))
                 nama_accuracy = calculate_accuracy(GROUND_TRUTH["Nama"], filtered_data.get("Nama", ""))
-
-                return render_template("index.html", json_data=json_data, nik_accuracy=nik_accuracy, nama_accuracy=nama_accuracy)
+                image_path = "F:\KerjaPraktik\KTP-SCAN1\KTPscan\src" + image_file.filename
+                image_file.save(image_path)
+                uploaded_image_path = image_path
+                return render_template("index.html", uploaded_image_path=uploaded_image_path, json_data=json_data, nik_accuracy=nik_accuracy, nama_accuracy=nama_accuracy)
             except Exception as e:
                 error_message = str(e)
                 return render_template("index.html", error_message=error_message)

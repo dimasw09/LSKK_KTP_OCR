@@ -39,6 +39,12 @@
         pre {
             white-space: pre-wrap;
         }
+        .json-data {
+            padding: 10px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
@@ -51,14 +57,16 @@
             <input type="file" name="image" accept="image/*" required>
             <button type="submit">Upload & Process</button>
         </form>
-        {% if image %}
+        {% if uploaded_image_path %}
             <h2>Uploaded Image</h2>
-            <img src="{{ image }}" alt="Image" style="max-width: 100%;">
+            <img src="{{ uploaded_image_path }}" alt="Uploaded Image" width="400">
         {% endif %}
 
         {% if json_data %}
         <h2>Extracted Data</h2>
-        <pre>{{ json_data }}</pre>
+        <div class="json-data">
+            <pre>{{ json_data }}</pre>
+        </div>
         <h2>Accuracy</h2>
         <p>NIK Accuracy: {{ nik_accuracy }}%</p>
         <p>Name Accuracy: {{ nama_accuracy }}%</p>
