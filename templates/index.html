@@ -57,9 +57,9 @@
             <input type="file" name="image" accept="image/*" required>
             <button type="submit">Upload & Process</button>
         </form>
-        {% if uploaded_image_path %}
+        {% if image %}
             <h2>Uploaded Image</h2>
-            <img src="{{ uploaded_image_path }}" alt="Uploaded Image" width="400">
+            <img src="file:///F:/KerjaPraktik/KTP-SCAN1/uploaded_image_path" alt="Uploaded Image" width="400">
         {% endif %}
 
         {% if json_data %}
