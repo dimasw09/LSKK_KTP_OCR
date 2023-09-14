@@ -45,7 +45,7 @@
             border: 1px solid #ddd;
             border-radius: 5px;
         }
-    </style>
+    </style> 
 </head>
 <body>
     <header>
@@ -63,13 +63,12 @@
         {% endif %}
 
         {% if json_data %}
-        <h2>Extracted Data</h2>
+        <h2>Extracted Filter Data</h2>
         <div class="json-data">
             <pre>{{ json_data }}</pre>
         </div>
-        <h2>Accuracy</h2>
-        <p>NIK Accuracy: {{ nik_accuracy }}%</p>
-        <p>Name Accuracy: {{ nama_accuracy }}%</p>
+        <h2>Extracted Real Data</h2>
+        <pre>{{ result }}</pre>
         {% endif %}
 
         {% if error_message %}
