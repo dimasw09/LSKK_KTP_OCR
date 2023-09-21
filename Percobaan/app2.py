@@ -8,7 +8,6 @@ import numpy as np
 from difflib import SequenceMatcher
 from datetime import datetime
 from db_connection import create_mongo_connection  
-import uuid
 
 app = Flask(__name__)
 
@@ -26,22 +25,12 @@ def calculate_accuracy(ground_truth, extracted_text):
     return similarity_ratio(ground_truth, extracted_text) * 100
 
 def extract_data(image_path):
-    try:
-        with open(image_path, "rb") as img_file:
+    with open(image_path, "rb") as img_file:
         img = cv2.imdecode(np.frombuffer(img_file.read(), np.uint8), cv2.IMREAD_COLOR)
-        
-        # Mengubah ukuran gambar ke lebar dan tinggi yang diinginkan
-        new_width = 1040  
-        new_height = 780  
-        img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
-
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
-
-        result = pytesseract.image_to_string(threshed, lang=LANG, config='--psm 6 --oem 3 --dpi 300 -c tessedit_char_blacklist=@#$?%^&*()- ')
-        return result
-    except Exception as e:
-        return str(e)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 255, cv2.THRESH_BINARY)
+    result = pytesseract.image_to_string(threshed, lang=LANG, config='--psm 6 --oem 3')
+    return result
 
 def parse_extracted_data(extracted_text):
     data = {}
@@ -70,18 +59,19 @@ def parse_extracted_data(extracted_text):
                         data["Nama"] = nama
     return data
 
+
 def filter_data(data):
     return {field: data[field] for field in ALLOWED_FIELDS if field in data}
 
-def create_json_data(new_filename, filtered_data):
-    ordered_data = {"nama_file": new_filename, **filtered_data}
+def create_json_data(image_file, filtered_data):
+    ordered_data = {"nama_file": image_file, **filtered_data}
     json_data = json.dumps(ordered_data, indent=3)
     return json_data
 
 def insert_json_data(json_data):
     try:
         # Insert the JSON data into the MongoDB collection
-        mongo_collection.insert_one(json.loads(json_data))
+        mongo_collection.insert_one(json_data)
         return "Data inserted into MongoDB successfully."
     except Exception as e:
         return f"Failed to insert data into MongoDB: {str(e)}"
@@ -90,55 +80,45 @@ def insert_json_data(json_data):
 def uploaded_image(filename):
     return send_from_directory("uploads", filename)
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET","POST"])
 def index():
     if request.method == "POST":
         image_file = request.files["image"]
         if image_file:
             try:
-                # Membuat UUID unik untuk file gambar
-                file_uuid = str(uuid.uuid4())
-
-                file_extension = os.path.splitext(image_file.filename)[-1].lower()
-
-                new_filename = f"{file_uuid}{file_extension}"
-
-                # Menyimpan gambar di lokasi sementara dengan nama file yang diubah menjadi UUID
-                image_temp_path = os.path.join("uploads", new_filename)
+                # Menyimpan gambar di lokasi sementara
+                image_temp_path = os.path.join("uploads", "temp_" + image_file.filename)
                 image_file.save(image_temp_path)
-                
-                permanent_image_path = os.path.join("F:\KerjaPraktik\KTP-SCAN1\ktpFtpServer", new_filename)
-                image_file.save(permanent_image_path)
 
-                extracted_text = extract_data(image_temp_path)
-
-                extracted_data = parse_extracted_data(extracted_text)
-                filtered_data = filter_data(extracted_data)
-                current_time = datetime.now()
-                formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
-                filtered_data["create_at"] = formatted_timestamp
-
-                # Mengubah ukuran gambar ke lebar dan tinggi yang diinginkan
+                # Mengubah ukuran gambar ke lebar 500 piksel dengan BILINEAR
                 img = Image.open(image_temp_path)
-                new_width = 1040
-                new_height = 780
-                img = img.resize((new_width, new_height), Image.BILINEAR)
-
+                print(img.height)
+                print(img.width)
+                img = img.resize((3205, int(img.height * (3325 / img.width))), Image.BILINEAR)
+                print(img.height)
+                print(img.width)
+                
                 img_np = np.fromfile(image_temp_path, np.uint8)
                 img = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
 
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
+                extracted_text = pytesseract.image_to_string(threshed, lang=LANG, config='--psm 6 --oem 3')
 
-                # Simpan hasil thresholding (threshed) sebagai gambar
-                result_image_path = os.path.join("F:\KerjaPraktik\KTP-SCAN1\hasil threshold", "T." + new_filename)
-                cv2.imwrite(result_image_path, threshed, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+                extracted_data = parse_extracted_data(extracted_text)
+                filtered_data = filter_data(extracted_data)
+                current_time = datetime.now()
+                formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
+                filtered_data["timestamp"] = formatted_timestamp                
+                json_data = create_json_data(image_file.filename, filtered_data)
+                
+                insert_result = insert_json_data(json.loads(json_data))
 
-                json_data = create_json_data(new_filename, filtered_data)  # Menggunakan new_filename di sini
+                # Menyimpan hasil thresholding (thresed) sebagai gambar
+                result_image_path = "F:\KerjaPraktik\KTP-SCAN1\hasil threshold\T."+image_file.filename
+                cv2.imwrite(result_image_path, threshed)
 
-                insert_result = insert_json_data(json_data)
-
-                return render_template("index.html", json_data=json_data, result=extracted_text, image_filename=new_filename, insert_result=insert_result)
+                return render_template("index.html", json_data=json_data, result=extracted_text, image_filename=image_file.filename, insert_result=insert_result)
             except Exception as e:
                 error_message = str(e)
                 return render_template("index.html", error_message=error_message)

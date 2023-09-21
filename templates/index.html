@@ -45,7 +45,7 @@
             border: 1px solid #ddd;
             border-radius: 5px;
         }
-    </style> 
+    </style>
 </head>
 <body>
     <header>
@@ -60,7 +60,7 @@
 
         {% if image_filename %}
         <h2>Uploaded Image</h2>
-        <img src="{{ url_for('uploaded_image', filename='temp_' + image_filename) }}" alt="Uploaded Image" width="500px">
+        <img src="/uploads/{{ image_filename }}" alt="Uploaded Image" width="500px">
         {% endif %}
 
         {% if json_data %}

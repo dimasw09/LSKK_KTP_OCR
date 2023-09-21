@@ -1,8 +1,8 @@
 import pymongo
 
 MONGO_URI = "mongodb://localhost:27017/"
-MONGO_DB_NAME = "admin"
-MONGO_COLLECTION_NAME = "OCR_KTP"
+MONGO_DB_NAME = "test"
+MONGO_COLLECTION_NAME = "Data_KTP"
 
 def create_mongo_connection():
     try:
