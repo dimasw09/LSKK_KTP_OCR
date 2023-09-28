@@ -9,6 +9,8 @@ import pytesseract
 from difflib import SequenceMatcher
 from ftplib import FTP
 import json
+from redis import Redis
+from rq import Queue, get_current_job
 from db_connection import create_mongo_connection
 
 
@@ -66,10 +68,15 @@ def parse_extracted_data(extracted_text):
 def filter_data(data):
     return {field: data[field] for field in ALLOWED_FIELDS if field in data}
 
-def process_image(image_path):
-    extracted_text = extract_data(image_path)
+def process_image(image_filename):
+    ftp_file_path = os.path.join('ktpFtpServer', image_filename)
+
+    extracted_text = extract_data(ftp_file_path)
     extracted_data = parse_extracted_data(extracted_text)
-    return filter_data(extracted_data)
+    filtered_data = filter_data(extracted_data)
+    return filtered_data
+
+
 
 def resize_image(image_path, new_width, new_height):
     img = Image.open(image_path)
