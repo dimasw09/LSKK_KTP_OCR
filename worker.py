@@ -94,7 +94,7 @@ def process_image(file_path, filename, data):
         file_extension = os.path.splitext(filename)[-1].lower()
         new_filename = f"{file_uuid}{file_extension}"
 
-        image_temp_path = os.path.join("uploads", new_filename)
+        image_temp_path = os.path.join("./downloAD/", new_filename)
 
         with open(file_path, 'wb') as file:  # Open the file in binary mode
             file.write(data)  # Write binary data directly
@@ -109,9 +109,9 @@ def process_image(file_path, filename, data):
         extracted_data = parse_extracted_data(extracted_text)
         filtered_data = filter_data(extracted_data)
 
-        current_time = datetime.now()
-        formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        filtered_data["create_at"] = formatted_timestamp
+        # # current_time = datetime.datetime.now()
+        # formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        # filtered_data["create_at"] = formatted_timestamp
 
         img = Image.open(image_temp_path)
         new_width = 1040
@@ -144,7 +144,7 @@ def download_from_ftp(local_path, filename):
         ftp.set_pasv(True)  # Use passive mode
         ftp.cwd('/ktp_ocr/')  # Use the correct FTP directory
 
-        local_path = os.path.join("./downloAD", filename)  # Use the correct local directory
+        local_path = os.path.join("./downloAD/", filename)  # Use the correct local directory
 
         print(f"Downloading {filename} from FTP server to {local_path}.")
 
