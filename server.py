@@ -1,75 +1,77 @@
 # server.py
-from flask import Flask, render_template, request, flash, redirect, url_for
-import os
-import secrets
-from datetime import datetime
+from flask import Flask, render_template, request
+# from worker import unique_filename
 import uuid
-from worker import process_image, upload_to_ftp
-from redist_conn import redis_queue
+import pika
+import os
+from ftplib import FTP
+
+FTP_SERVER = 'ftp5.pptik.id'
+FTP_PORT = 2121
+FTP_USERNAME = 'magangitg'
+FTP_PASSWORD = 'bWFnYW5naXRn'
+FTP_UPLOAD_DIR = '/ktp_ocr'
+
+unique_filename = str(uuid.uuid4()) + '.png'
 
 app = Flask(__name__)
 
-# Constants
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
-UPLOAD_FOLDER = 'uploads'
+# RabbitMQ configurations
+RABBITMQ_HOST = 'localhost'
+RABBITMQ_QUEUE = 'image_queue'
 
-FTP_SERVER = 'localhost:2121'
-FTP_USERNAME = 'dimassk7'
-FTP_PASSWORD = '140289'
-FTP_UPLOAD_DIRECTORY = 'ktpFtpServer'
 
-secret_key = secrets.token_hex(16)
-app.secret_key = secret_key
-print(secret_key)
+def send_to_queue(file_path):
+    connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
+    channel = connection.channel()
+    channel.queue_declare(queue=RABBITMQ_QUEUE)
+    channel.basic_publish(exchange='', routing_key=RABBITMQ_QUEUE, body=file_path)
+    connection.close()
 
-def allowed_file(filename): 
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def upload_to_ftp(file_path, filename):
+    try:
+        ftp = FTP()
+        ftp.connect(FTP_SERVER, FTP_PORT)
+        ftp.login(FTP_USERNAME, FTP_PASSWORD)
+        ftp.cwd(FTP_UPLOAD_DIR)
 
-@app.route("/", methods=["GET", "POST"])
+        print(f"Uploading {filename} to FTP server.")
+        with open(file_path, 'rb') as file:
+            ftp.storbinary(f"STOR {filename}", file)
+
+        print(f"Upload completed for {filename}.")
+        ftp.quit()
+    except Exception as e:
+        print(f"FTP upload failed: {str(e)}")
+
+@app.route("/", methods=["POST"])
 def index():
     if request.method == "POST":
-        if 'image' not in request.files:
-            flash("No image part", 'error')
-            return redirect(request.url)
-        
         image_file = request.files["image"]
-
-        if image_file.filename == "":
-            flash("No selected image", 'error')
-            return redirect(request.url)
-
-# Inside the index route
-        if image_file and allowed_file(image_file.filename):
+        if image_file:
             try:
-                # Generate a unique UUID for the image file
+                # Generate a unique filename
                 file_uuid = str(uuid.uuid4())
                 file_extension = os.path.splitext(image_file.filename)[-1].lower()
                 new_filename = f"{file_uuid}{file_extension}"
 
-                # Save the image to a temporary location with the UUID filename
-                image_temp_path = os.path.join(UPLOAD_FOLDER, new_filename)
-                image_file.save(image_temp_path)
+                # Save the image temporarily
+                temp_path = os.path.join("uploads", new_filename)
+                image_file.save(temp_path)
 
-                # Upload the image to FTP server with the specified directory
-                upload_result = upload_to_ftp(image_temp_path, new_filename, FTP_SERVER, FTP_USERNAME, FTP_PASSWORD, FTP_UPLOAD_DIRECTORY)
-                if upload_result:
-                    # If upload is successful, enqueue the image for processing
-                    redis_queue.enqueue(process_image, new_filename)
+                # Send the file path to the message queue
+                send_to_queue(temp_path)
 
-                    current_time = datetime.now()
-                    formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
+                # Upload the file to FTP server
+                upload_to_ftp(temp_path, new_filename)  # Ensure you pass both arguments
 
-                    flash(f"Image {new_filename} uploaded successfully!", 'success')
-                    return redirect(url_for("index"))
-                else:
-                    flash("Failed to upload image to FTP server", 'error')
-
+                return "File uploaded successfully."
             except Exception as e:
                 error_message = str(e)
-                flash(error_message, 'error')
-
-
-    return render_template("index.html")
+                return error_message
+        else:
+            error_message = "No image uploaded."
+            return error_message
 
 if __name__ == "__main__":
-    app.run(debug=True)  # Run the Flask app with debug mode enabled
+    app.run(debug=True)
