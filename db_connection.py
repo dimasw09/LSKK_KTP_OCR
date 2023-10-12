@@ -2,9 +2,10 @@
 import pymongo
 import logging
 
-MONGO_URI = "mongodb://localhost:27017/"
-MONGO_DB_NAME = "admin"
-MONGO_COLLECTION_NAME = "ktp"
+
+MONGO_URI = "mongodb://magangitg:bWFnYW5naXRn@database2.pptik.id:27017/?authMechanism=DEFAULT&authSource=magangitg"
+MONGO_DB_NAME = "magangitg"
+MONGO_COLLECTION_NAME = "ktp_ocr"
 
 def create_mongo_connection():
     try:

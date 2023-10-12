@@ -21,11 +21,11 @@ RABBITMQ_HOST = 'localhost'
 RABBITMQ_QUEUE = 'image_queue'
 
 
-def send_to_queue(file_path):
+def send_to_queue(filename):
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_declare(queue=RABBITMQ_QUEUE)
-    channel.basic_publish(exchange='', routing_key=RABBITMQ_QUEUE, body=file_path)
+    channel.basic_publish(exchange='', routing_key=RABBITMQ_QUEUE, body=filename)
     connection.close()
 
 def upload_to_ftp(file_path, filename):
@@ -59,11 +59,11 @@ def index():
                 temp_path = os.path.join("uploads", new_filename)
                 image_file.save(temp_path)
 
-                # Send the file path to the message queue
-                send_to_queue(temp_path)
-
                 # Upload the file to FTP server
-                upload_to_ftp(temp_path, new_filename)  # Ensure you pass both arguments
+                upload_to_ftp(temp_path, new_filename)
+
+                # Send the file path to the message queue only if FTP upload is successful
+                send_to_queue(temp_path)
 
                 return "File uploaded successfully."
             except Exception as e:

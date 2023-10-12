@@ -1,39 +1,62 @@
 # worker.py
 import pika
 import os
-from flask import Flask
 import uuid
 from PIL import Image
-from server import upload_to_ftp, FTP
 import cv2
 import numpy as np
 import pytesseract
 import json
-from db_connection import create_mongo_connection
-import datetime
 import logging
+from ftplib import FTP
 from io import BytesIO
+import datetime
+from pymongo import MongoClient
 
-app = Flask(__name__)
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
 
-logging.basicConfig(level=logging.WARNING)
-
+# Constants
 THRESHOLD_VALUE = 125
 LANG = "ind"
 ALLOWED_FIELDS = ["NIK", "Nama"]
-
-# RabbitMQ configurations
 RABBITMQ_HOST = 'localhost'
 RABBITMQ_QUEUE = 'image_queue'
-mongo_collection = create_mongo_connection()
-
-unique_filename = str(uuid.uuid4()) + '.png'
-# FTP configurations
-FTP_SERVER = 'ftp5.pptik.id'
+FTP_SERVER = "ftp5.pptik.id"
+FTP_USERNAME = "magangitg"
+FTP_PASSWORD = "bWFnYW5naXRn"
 FTP_PORT = 2121
-FTP_USERNAME = 'magangitg'
-FTP_PASSWORD = 'bWFnYW5naXRn'
-FTP_UPLOAD_DIR = '/ktp_ocr'
+FTP_UPLOAD_DIR = '/OCR-kWh'
+
+DIRECTORY_NAME = "./download/"
+if not os.path.exists(DIRECTORY_NAME):
+    os.makedirs(DIRECTORY_NAME)
+
+
+
+def download_from_ftp(filename, direktori=FTP_UPLOAD_DIR):
+    try:
+        ftp = FTP()
+        ftp.set_debuglevel(2) 
+        ftp.connect(FTP_SERVER, FTP_PORT)
+        ftp.login(FTP_USERNAME, FTP_PASSWORD)
+        ftp.set_pasv(True)  # Using passive mode
+        ftp.cwd(direktori)
+
+        buffer = BytesIO()
+
+        filename_cleaned = os.path.basename(filename).rstrip('}"')
+        full_path_on_ftp = f"{direktori}/{filename_cleaned}"
+        logging.info(f"Executing FTP command: RETR {full_path_on_ftp}")
+        logging.info(f"Trying to download file from FTP: {full_path_on_ftp}")
+
+        ftp.retrbinary(f'RETR "{full_path_on_ftp}"', buffer.write)
+        ftp.quit()
+        buffer.seek(0)
+        return buffer
+    except Exception as e:
+        logging.error(f"FTP download error: {e}")
+        return None
 
 def extract_data(image_path):
     try:
@@ -81,111 +104,85 @@ def create_json_data(new_filename, filtered_data):
     json_data = json.dumps(ordered_data, indent=3)
     return json_data
 
-def insert_json_data(new_filename, filtered_data):
-    try:
-        ordered_data = {"nama_file": new_filename, **filtered_data}
-        json_data = json.dumps(ordered_data, indent=3)
-        mongo_collection.insert_one(json.loads(json_data))
-        return "Data inserted into MongoDB successfully."
-    except Exception as e:
-        return f"Failed to insert data into MongoDB: {str(e)}"
+# def insert_json_data(new_filename, filtered_data):
+#     try:
+#         ordered_data = {"nama_file": new_filename, **filtered_data}
+#         json_data = json.dumps(ordered_data, indent=3)
+#         client = MongoClient('mongodb://magangitg:bWFnYW5naXRn@database2.pptik.id:27017/?authMechanism=DEFAULT&authSource=magangitg')
+#         db = client['magangitg']
+#         collection = db['ktp_ocr']
+
+#         # Insert the output_data into the MongoDB collection
+#         result = collection.insert_one(json_data)
+
+#         return result
+#     except Exception as e:
+#         return f"Failed to insert data into MongoDB: {str(e)}"
 
 
 
 def process_image(file_path, filename, data):
     try:
-        # file_uuid = str(uuid.uuid4())
-        # file_extension = os.path.splitext(filename)[-1].lower()
-        # # new_filename = f"{file_uuid}{file_extension}"
+        file_uuid = str(uuid.uuid4())
+        file_extension = os.path.splitext(filename)[-1].lower()
+        new_filename = f"{file_uuid}{file_extension}"
 
-        image_temp_path = os.path.join("./downloAD/", filename)
+        image_temp_path = os.path.join("./download/", new_filename)
 
-        with open(file_path, 'wb') as file:  # Open the file in binary mode
-            file.write(data)  # Write binary data directly
+        # Write the data to image_temp_path instead of file_path
+        with open(image_temp_path, 'wb') as file:  
+            file.write(data)  
 
+        # Open the image using image_temp_path
         try:
-            Image.open(file_path)
+            Image.open(image_temp_path)
         except Exception as e:
-            raise ValueError(f"The file {filename} is not a valid image.")
-        extracted_text = extract_data(file_path)
+            raise ValueError(f"The file {new_filename} is not a valid image.")
+        
+        extracted_text = extract_data(image_temp_path)  # Use image_temp_path here
         extracted_data = parse_extracted_data(extracted_text)
         filtered_data = filter_data(extracted_data)
-
-        current_time = datetime.datetime.now()
-        formatted_timestamp = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        filtered_data["create_at"] = formatted_timestamp
 
         img = Image.open(image_temp_path)
         new_width = 1040
         new_height = 780
         img = img.resize((new_width, new_height), Image.BILINEAR)
 
-        img_np = np.fromfile(image_temp_path, np.uint8)
-        img = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+        img_np = np.array(img)  # Convert the PIL image directly to numpy array
+        img = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
 
-        result_image_path = os.path.join("F:\KerjaPraktik\KTP-SCAN1\hasil threshold", "T." + filename)
+        result_image_path = os.path.join("F:\KerjaPraktik\KTP-SCAN1\hasil threshold", "T." + new_filename)
         cv2.imwrite(result_image_path, threshed, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
 
-        json_data = create_json_data(filename, filtered_data)
+        json_data = create_json_data(new_filename, filtered_data)
         insert_result = insert_json_data(json_data, filtered_data)
 
-        return filename, extracted_text, insert_result
+        print(f"Processed Image: {new_filename}\nExtracted Text: {extracted_text}\nInsert Result: {insert_result}")
+
+        return new_filename, extracted_text, insert_result
     except Exception as e:
         print(f"Error processing image: {str(e)}")
         raise e
+
     
 
-def download_from_ftp(local_path, filename):
-    try:
-        ftp = FTP()
-        ftp.connect('ftp5.pptik.id', port=2121)
-        ftp.login('magangitg', 'bWFnYW5naXRn')
-        ftp.set_pasv(True)  # Coba ganti dengan True jika tidak berhasil
-        ftp.cwd('/ktp_ocr')
-        buffer = BytesIO()
-
-        local_directory = "./downloAD/"
-        os.makedirs(local_directory, exist_ok=True)
-
-        local_path = os.path.join(local_directory, filename)
-
-        print(f"Downloading {filename} from FTP server to {local_path}.")
-
-        # with open(local_path, 'wb') as buffer:
-        #     ftp.retrbinary(f"RETR {filename}", buffer.write)
-        ftp.retrbinary(f'RETR "{filename}"', buffer.write)
-
-
-        print(f"Downloaded {filename} from FTP server.")
-
-        ftp.quit()
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        print(f"FTP download failed: {str(e)}")
-        return None
 
 def callback(ch, method, properties, body):
     try:
         file_path = body.decode("utf-8")
         filename_cleaned = os.path.basename(file_path).rstrip('}"')
 
-        buffer = download_from_ftp(file_path, filename_cleaned)
+        buffer = download_from_ftp(file_path)
         if buffer:
-            local_path = os.path.join('./downloAD/', filename_cleaned)
+            local_path = os.path.join(DIRECTORY_NAME, filename_cleaned)
             with open(local_path, 'wb') as file:
                 file.write(buffer.getvalue())
 
             if os.path.exists(local_path):
-                result = process_image(local_path, filename_cleaned, buffer.getvalue())
-                if result:
-                    filename, extracted_text, insert_result = result
-                    print(f"Processed {filename} , {extracted_text}, {insert_result}")
-                    
-
+                process_image(local_path, filename_cleaned, buffer.getvalue())
                 # Delete the temporary file
                 os.remove(local_path)
             else:
@@ -194,17 +191,20 @@ def callback(ch, method, properties, body):
     except Exception as e:
         logging.error(f"Error in callback: {str(e)}")
 
-    except Exception as e:
-        logging.error(f"Error in callback: {str(e)}")
-    
-
 def start_consumer():
     connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
     channel = connection.channel()
     channel.queue_declare(queue=RABBITMQ_QUEUE)
     channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=callback, auto_ack=True)
-    print('Waiting for messages. To exit press CTRL+C')
+    logging.info('Waiting for messages. To exit press CTRL+C')
     channel.start_consuming()
-    
+
+
 if __name__ == "__main__":
-    start_consumer()
+    try:
+        start_consumer()
+    except Exception as e:
+        logging.error(f"Failed to start the consumer: {str(e)}")
+
+
+
