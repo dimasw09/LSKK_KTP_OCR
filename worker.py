@@ -23,30 +23,40 @@ LANG = "ind"
 ALLOWED_FIELDS = ["NIK", "Nama"]
 
 # RabbitMQ configurations
-RABBITMQ_HOST = 'localhost'
-RABBITMQ_QUEUE = 'image_queue'
+RABBITMQ_HOST = "localhost"
+RABBITMQ_QUEUE = "image_queue"
 mongo_collection = create_mongo_connection()
 
-unique_filename = str(uuid.uuid4()) + '.png'
+unique_filename = str(uuid.uuid4()) + ".png"
 # FTP configurations
-FTP_SERVER = 'ftp5.pptik.id'
+FTP_SERVER = "ftp5.pptik.id"
 FTP_PORT = 2121
-FTP_USERNAME = 'magangitg'
-FTP_PASSWORD = 'bWFnYW5naXRn'
-FTP_UPLOAD_DIR = '/ktp_ocr'
+FTP_USERNAME = "magangitg"
+FTP_PASSWORD = "bWFnYW5naXRn"
+FTP_UPLOAD_DIR = "/ktp_ocr"
+
 
 def extract_data(image_path):
     try:
         with open(image_path, "rb") as img_file:
-            img = cv2.imdecode(np.frombuffer(img_file.read(), np.uint8), cv2.IMREAD_COLOR)
-        
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
+            img = cv2.imdecode(
+                np.frombuffer(img_file.read(), np.uint8), cv2.IMREAD_COLOR
+            )
 
-        result = pytesseract.image_to_string(threshed, lang=LANG, config='--psm 6 --oem 3 --dpi 300 -c tessedit_char_blacklist=@#$?%^&*()- ')
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, threshed = cv2.threshold(
+            gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY
+        )
+
+        result = pytesseract.image_to_string(
+            threshed,
+            lang=LANG,
+            config="--psm 6 --oem 3 --dpi 300 -c tessedit_char_blacklist=@#$?%^&*()- ",
+        )
         return result
     except Exception as e:
         return str(e)
+
 
 def parse_extracted_data(extracted_text):
     data = {}
@@ -57,7 +67,7 @@ def parse_extracted_data(extracted_text):
     for line in lines:
         for field in ALLOWED_FIELDS:
             if field in line:
-                field_value = line.split(':', 1)
+                field_value = line.split(":", 1)
                 if len(field_value) == 2:
                     field, value = field_value
                     data[field.strip()] = value.strip()
@@ -73,13 +83,16 @@ def parse_extracted_data(extracted_text):
                         data["Nama"] = nama
     return data
 
+
 def filter_data(data):
     return {field: data[field] for field in ALLOWED_FIELDS if field in data}
+
 
 def create_json_data(new_filename, filtered_data):
     ordered_data = {"nama_file": new_filename, **filtered_data}
     json_data = json.dumps(ordered_data, indent=3)
     return json_data
+
 
 def insert_json_data(new_filename, filtered_data):
     try:
@@ -91,7 +104,6 @@ def insert_json_data(new_filename, filtered_data):
         return f"Failed to insert data into MongoDB: {str(e)}"
 
 
-
 def process_image(file_path, filename, data):
     try:
         # file_uuid = str(uuid.uuid4())
@@ -100,7 +112,7 @@ def process_image(file_path, filename, data):
 
         image_temp_path = os.path.join("./downloAD/", filename)
 
-        with open(file_path, 'wb') as file:  # Open the file in binary mode
+        with open(file_path, "wb") as file:  # Open the file in binary mode
             file.write(data)  # Write binary data directly
 
         try:
@@ -124,10 +136,16 @@ def process_image(file_path, filename, data):
         img = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, threshed = cv2.threshold(gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY)
+        _, threshed = cv2.threshold(
+            gray, THRESHOLD_VALUE, 200, cv2.THRESH_BINARY
+        )
 
-        result_image_path = os.path.join("F:\KerjaPraktik\KTP-SCAN1\hasil threshold", "T." + filename)
-        cv2.imwrite(result_image_path, threshed, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
+        result_image_path = os.path.join(
+            "F:\KerjaPraktik\KTP-SCAN1\HT", "T." + filename
+        )
+        cv2.imwrite(
+            result_image_path, threshed, [int(cv2.IMWRITE_JPEG_QUALITY), 100]
+        )
 
         json_data = create_json_data(filename, filtered_data)
         insert_result = insert_json_data(json_data, filtered_data)
@@ -136,15 +154,15 @@ def process_image(file_path, filename, data):
     except Exception as e:
         print(f"Error processing image: {str(e)}")
         raise e
-    
+
 
 def download_from_ftp(local_path, filename):
     try:
         ftp = FTP()
-        ftp.connect('ftp5.pptik.id', port=2121)
-        ftp.login('magangitg', 'bWFnYW5naXRn')
+        ftp.connect("ftp5.pptik.id", port=2121)
+        ftp.login("magangitg", "bWFnYW5naXRn")
         ftp.set_pasv(True)  # Coba ganti dengan True jika tidak berhasil
-        ftp.cwd('/ktp_ocr')
+        ftp.cwd("/ktp_ocr")
         buffer = BytesIO()
 
         local_directory = "./downloAD/"
@@ -153,11 +171,7 @@ def download_from_ftp(local_path, filename):
         local_path = os.path.join(local_directory, filename)
 
         print(f"Downloading {filename} from FTP server to {local_path}.")
-
-        # with open(local_path, 'wb') as buffer:
-        #     ftp.retrbinary(f"RETR {filename}", buffer.write)
         ftp.retrbinary(f'RETR "{filename}"', buffer.write)
-
 
         print(f"Downloaded {filename} from FTP server.")
 
@@ -168,6 +182,7 @@ def download_from_ftp(local_path, filename):
         print(f"FTP download failed: {str(e)}")
         return None
 
+
 def callback(ch, method, properties, body):
     try:
         file_path = body.decode("utf-8")
@@ -175,36 +190,40 @@ def callback(ch, method, properties, body):
 
         buffer = download_from_ftp(file_path, filename_cleaned)
         if buffer:
-            local_path = os.path.join('./downloAD/', filename_cleaned)
-            with open(local_path, 'wb') as file:
+            local_path = os.path.join("./downloAD/", filename_cleaned)
+            with open(local_path, "wb") as file:
                 file.write(buffer.getvalue())
 
             if os.path.exists(local_path):
-                result = process_image(local_path, filename_cleaned, buffer.getvalue())
+                result = process_image(
+                    local_path, filename_cleaned, buffer.getvalue()
+                )
                 if result:
                     filename, extracted_text, insert_result = result
-                    print(f"Processed {filename} , {extracted_text}, {insert_result}")
-                    
-
+                    print(
+                        f"Processed {filename} , {extracted_text}, {insert_result}"
+                    )
                 # Delete the temporary file
                 os.remove(local_path)
             else:
                 logging.error(f"File not found: {local_path}")
-
+        # print(local_path,filename_cleaned)
     except Exception as e:
         logging.error(f"Error in callback: {str(e)}")
 
-    except Exception as e:
-        logging.error(f"Error in callback: {str(e)}")
-    
 
 def start_consumer():
-    connection = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(RABBITMQ_HOST)
+    )
     channel = connection.channel()
     channel.queue_declare(queue=RABBITMQ_QUEUE)
-    channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=callback, auto_ack=True)
-    print('Waiting for messages. To exit press CTRL+C')
+    channel.basic_consume(
+        queue=RABBITMQ_QUEUE, on_message_callback=callback, auto_ack=True
+    )
+    print("Waiting for messages. To exit press CTRL+C")
     channel.start_consuming()
-    
+
+
 if __name__ == "__main__":
     start_consumer()
