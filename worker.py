@@ -89,15 +89,14 @@ def filter_data(data):
 
 
 def create_json_data(new_filename, filtered_data):
-    ordered_data = {"nama_file": new_filename, **filtered_data}
-    json_data = json.dumps(ordered_data, indent=3)
+    ordered_data = {"nama_file": new_filename}
+    # Use filtered_data directly instead of creating another dictionary
+    json_data = json.dumps(ordered_data | filtered_data, indent=3)
     return json_data
 
 
-def insert_json_data(new_filename, filtered_data):
+def insert_json_data(json_data):
     try:
-        ordered_data = {"nama_file": new_filename, **filtered_data}
-        json_data = json.dumps(ordered_data, indent=3)
         mongo_collection.insert_one(json.loads(json_data))
         return "Data inserted into MongoDB successfully."
     except Exception as e:
@@ -106,10 +105,6 @@ def insert_json_data(new_filename, filtered_data):
 
 def process_image(file_path, filename, data):
     try:
-        # file_uuid = str(uuid.uuid4())
-        # file_extension = os.path.splitext(filename)[-1].lower()
-        # # new_filename = f"{file_uuid}{file_extension}"
-
         image_temp_path = os.path.join("./downloAD/", filename)
 
         with open(file_path, "wb") as file:  # Open the file in binary mode
@@ -148,7 +143,7 @@ def process_image(file_path, filename, data):
         )
 
         json_data = create_json_data(filename, filtered_data)
-        insert_result = insert_json_data(json_data, filtered_data)
+        insert_result = insert_json_data(json_data)
 
         return filename, extracted_text, insert_result
     except Exception as e:
@@ -191,6 +186,7 @@ def callback(ch, method, properties, body):
         buffer = download_from_ftp(file_path, filename_cleaned)
         if buffer:
             local_path = os.path.join("./downloAD/", filename_cleaned)
+            local_path2 = os.path.join("./uploads/", filename_cleaned)
             with open(local_path, "wb") as file:
                 file.write(buffer.getvalue())
 
@@ -203,8 +199,9 @@ def callback(ch, method, properties, body):
                     print(
                         f"Processed {filename} , {extracted_text}, {insert_result}"
                     )
-                # Delete the temporary file
-                os.remove(local_path)
+                    # Delete the temporary file
+                    os.remove(local_path)
+                    os.remove(local_path2)
             else:
                 logging.error(f"File not found: {local_path}")
         # print(local_path,filename_cleaned)
